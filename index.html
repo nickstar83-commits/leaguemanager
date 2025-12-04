@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>스포츠 리그전 매니저</title>
     
-    <!-- Tailwind CSS -->
+    <!-- Tailwind CSS (수정됨: srcf -> src) -->
     <script src="https://cdn.tailwindcss.com"></script>
     
     <!-- React & Babel -->
@@ -24,10 +24,40 @@
         .animate-fade-in-up {
             animation: fade-in-up 0.5s ease-out forwards;
         }
+        /* 로딩 스피너 */
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .loading-container {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #f9fafb;
+            color: #4b5563;
+            font-family: sans-serif;
+        }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800 font-sans">
-    <div id="root"></div>
+    <div id="root">
+        <!-- 리액트 로딩 전 표시될 화면 -->
+        <div class="loading-container">
+            <div class="loader"></div>
+            <p>앱을 불러오는 중입니다...</p>
+        </div>
+    </div>
 
     <script type="text/babel" data-type="module">
         import React, { useState, useEffect, useRef } from 'https://esm.sh/react@18?dev';
@@ -36,6 +66,22 @@
             Trophy, Users, Calendar, Plus, Trash2, RefreshCw, Save, Medal, Award, X, 
             Download, Upload, FileSpreadsheet, FileText, Edit2, RotateCcw, ArrowRight, User, Users as UsersIcon, Settings, TrendingUp, AlertCircle
         } from 'https://esm.sh/lucide-react@0.263.1?dev';
+
+        // --- Utility Functions ---
+        // UUID Fallback Generator (호환성 문제 해결)
+        const generateId = () => {
+            if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+                try {
+                    return crypto.randomUUID();
+                } catch (e) {
+                    // Fallback if crypto exists but randomUUID fails (e.g. insecure context)
+                }
+            }
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        };
 
         function LeagueManager() {
             // --- LocalStorage Helper ---
@@ -141,7 +187,7 @@
             const createPlayer = (name) => {
                 if (players.some(p => p.name === name)) return;
                 const newPlayer = {
-                    id: crypto.randomUUID(),
+                    id: generateId(),
                     name: name,
                     matchesPlayed: 0,
                     wins: 0,
@@ -192,7 +238,7 @@
                     }
                     const roundPairs = singlesSchedule[roundCount];
                     newMatches = roundPairs.map(pair => ({
-                        id: crypto.randomUUID(), round: nextRound, team1: [pair[0].id], team2: [pair[1].id],
+                        id: generateId(), round: nextRound, team1: [pair[0].id], team2: [pair[1].id],
                         score1: '', score2: '', isFinished: false
                     }));
                 } 
@@ -206,7 +252,7 @@
                         const p1 = available.shift();
                         const p2 = available.shift();
                         newMatches.push({
-                            id: crypto.randomUUID(), round: nextRound, team1: [p1.id], team2: [p2.id],
+                            id: generateId(), round: nextRound, team1: [p1.id], team2: [p2.id],
                             score1: '', score2: '', isFinished: false
                         });
                     }
@@ -221,7 +267,7 @@
                     while (available.length >= 4) {
                         const group = [available.shift(), available.shift(), available.shift(), available.shift()].sort(()=>0.5-Math.random());
                         newMatches.push({
-                            id: crypto.randomUUID(), round: nextRound, team1: [group[0].id, group[1].id], team2: [group[2].id, group[3].id],
+                            id: generateId(), round: nextRound, team1: [group[0].id, group[1].id], team2: [group[2].id, group[3].id],
                             score1: '', score2: '', isFinished: false
                         });
                     }
