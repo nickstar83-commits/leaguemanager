@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>스포츠 리그전 매니저</title>
     
-    <!-- Tailwind CSS (수정됨: srcf -> src) -->
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
     <!-- React & Babel -->
@@ -47,35 +47,87 @@
             background-color: #f9fafb;
             color: #4b5563;
             font-family: sans-serif;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            z-index: 9999;
+            transition: opacity 0.5s ease-out;
+        }
+        .hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        .reset-btn {
+            margin-top: 20px;
+            padding: 8px 16px;
+            background-color: #ef4444;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            display: none; /* 초기엔 숨김 */
         }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-800 font-sans">
-    <div id="root">
-        <!-- 리액트 로딩 전 표시될 화면 -->
-        <div class="loading-container">
-            <div class="loader"></div>
-            <p>앱을 불러오는 중입니다...</p>
-        </div>
+    <div id="root"></div>
+    
+    <!-- 초기 로딩 화면 -->
+    <div id="loader" class="loading-container">
+        <div class="loader"></div>
+        <p>앱을 불러오는 중입니다...</p>
+        <p style="font-size: 12px; margin-top: 10px; color: #9ca3af;">(인터넷 연결이 필요합니다)</p>
+        <button id="emergency-reset" class="reset-btn" onclick="emergencyReset()">데이터 초기화 및 새로고침</button>
     </div>
 
-    <script type="text/babel" data-type="module">
-        import React, { useState, useEffect, useRef } from 'https://esm.sh/react@18?dev';
-        import ReactDOM from 'https://esm.sh/react-dom@18/client?dev';
+    <!-- 오류 발생 시 알림 및 비상 초기화 스크립트 -->
+    <script>
+        // 5초 뒤에도 로딩 중이면 초기화 버튼 표시
+        setTimeout(() => {
+            const btn = document.getElementById('emergency-reset');
+            if (btn) btn.style.display = 'block';
+        }, 5000);
+
+        function emergencyReset() {
+            if(confirm("저장된 모든 데이터를 삭제하고 초기화하시겠습니까?\n(앱이 열리지 않을 때 사용)")) {
+                localStorage.removeItem('league_manager_local_v3'); // v3로 변경
+                location.reload();
+            }
+        }
+
+        window.onerror = function(message, source, lineno, colno, error) {
+            const loader = document.getElementById('loader');
+            if (loader) {
+                loader.innerHTML = `
+                    <div style="text-align:center; padding: 20px;">
+                        <h3 style="color:red; font-weight:bold;">오류가 발생했습니다</h3>
+                        <p>${message}</p>
+                        <p style="font-size:12px; margin-top:10px;">인터넷 연결을 확인하거나 아래 버튼을 눌러보세요.</p>
+                        <button onclick="emergencyReset()" style="margin-top:10px; padding:5px 10px; background:#ef4444; color:white; border:none; border-radius:4px; cursor:pointer;">데이터 초기화</button>
+                    </div>
+                `;
+            }
+        };
+    </script>
+
+    <script type="text/babel" data-type="module" data-presets="react">
+        // React 라이브러리
+        import React, { useState, useEffect, useRef } from 'https://esm.sh/react@18.2.0?dev';
+        import ReactDOM from 'https://esm.sh/react-dom@18.2.0/client?dev';
+        
+        // 아이콘 라이브러리 (최신 버전 사용)
         import { 
             Trophy, Users, Calendar, Plus, Trash2, RefreshCw, Save, Medal, Award, X, 
-            Download, Upload, FileSpreadsheet, FileText, Edit2, RotateCcw, ArrowRight, User, Users as UsersIcon, Settings, TrendingUp, AlertCircle
-        } from 'https://esm.sh/lucide-react@0.263.1?dev';
+            Download, Upload, FileSpreadsheet, FileText, Edit2, RotateCcw, ArrowRight, 
+            User, Users as UsersIcon, Settings, TrendingUp, AlertCircle, School, CheckSquare, Square, Check, ChevronRight, FolderPlus
+        } from 'https://esm.sh/lucide-react@0.344.0?dev';
 
         // --- Utility Functions ---
-        // UUID Fallback Generator (호환성 문제 해결)
         const generateId = () => {
             if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-                try {
-                    return crypto.randomUUID();
-                } catch (e) {
-                    // Fallback if crypto exists but randomUUID fails (e.g. insecure context)
-                }
+                try { return crypto.randomUUID(); } catch (e) {}
             }
             return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
                 var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
@@ -84,11 +136,33 @@
         };
 
         function LeagueManager() {
+            // --- 화면 로딩 완료 처리 ---
+            useEffect(() => {
+                const loader = document.getElementById('loader');
+                if (loader) {
+                    loader.classList.add('hidden'); // 로딩 화면 숨김
+                    setTimeout(() => {
+                        loader.style.display = 'none'; // 완전히 제거
+                    }, 500);
+                }
+            }, []);
+
             // --- LocalStorage Helper ---
             const getSavedData = () => {
                 try {
-                    const saved = localStorage.getItem('league_manager_local_v1');
-                    return saved ? JSON.parse(saved) : null;
+                    const saved = localStorage.getItem('league_manager_local_v3'); 
+                    let data = saved ? JSON.parse(saved) : null;
+                    
+                    // 마이그레이션: 구 버전 데이터(단순 배열)가 있으면 '기본 학급'으로 변환
+                    if (data && Array.isArray(data.classRoster) && typeof data.classRoster[0] === 'string') {
+                        data.classGroups = [{
+                            id: generateId(),
+                            name: '기본 학급',
+                            students: data.classRoster
+                        }];
+                        delete data.classRoster;
+                    }
+                    return data;
                 } catch (e) { return null; }
             };
             const savedData = getSavedData();
@@ -105,11 +179,21 @@
             const [roundCount, setRoundCount] = useState(savedData?.roundCount || 0);
             const [singlesSchedule, setSinglesSchedule] = useState(savedData?.singlesSchedule || []);
             
+            // Class Groups Data (New Structure)
+            // { id: string, name: string, students: string[] }[]
+            const [classGroups, setClassGroups] = useState(savedData?.classGroups || []);
+
             // UI State
             const [newPlayerName, setNewPlayerName] = useState('');
             const [showBulkModal, setShowBulkModal] = useState(false);
+            const [showClassModal, setShowClassModal] = useState(false); 
             const [showStartModal, setShowStartModal] = useState(false);
             const [bulkText, setBulkText] = useState('');
+            
+            // Class Modal UI State
+            const [activeGroupId, setActiveGroupId] = useState(null); // Currently selected class group
+            const [isEditingRoster, setIsEditingRoster] = useState(false);
+            const [selectedClassMembers, setSelectedClassMembers] = useState(new Set());
 
             // Refs
             const fileInputRef = useRef(null);
@@ -119,11 +203,11 @@
             // --- Auto-Save ---
             useEffect(() => {
                 const dataToSave = {
-                    view, activeTab, leagueName, leagueType, players, matches, roundCount, singlesSchedule,
+                    view, activeTab, leagueName, leagueType, players, matches, roundCount, singlesSchedule, classGroups,
                     savedAt: new Date().toISOString()
                 };
-                localStorage.setItem('league_manager_local_v1', JSON.stringify(dataToSave));
-            }, [view, activeTab, leagueName, leagueType, players, matches, roundCount, singlesSchedule]);
+                localStorage.setItem('league_manager_local_v3', JSON.stringify(dataToSave));
+            }, [view, activeTab, leagueName, leagueType, players, matches, roundCount, singlesSchedule, classGroups]);
 
             // --- Round Robin Logic ---
             const generateRoundRobinSchedule = (playerList) => {
@@ -169,7 +253,6 @@
                 setLeagueType('doubles_random');
                 setSinglesSchedule([]);
                 setActiveTab('players');
-                localStorage.removeItem('league_manager_local_v1');
             };
 
             const startLeagueSetup = () => {
@@ -206,6 +289,56 @@
                     return;
                 }
                 setPlayers(players.filter(p => p.id !== id));
+            };
+
+            // --- Class Group Management ---
+            const addNewClassGroup = () => {
+                const name = prompt("새 학급의 이름(학년/반)을 입력하세요 (예: 1학년 3반):");
+                if (name) {
+                    const newGroup = { id: generateId(), name: name.trim(), students: [] };
+                    setClassGroups([...classGroups, newGroup]);
+                    setActiveGroupId(newGroup.id);
+                    setIsEditingRoster(true); // 바로 명단 입력으로 이동
+                }
+            };
+
+            const deleteClassGroup = (groupId) => {
+                if(confirm("정말 이 학급 명단을 삭제하시겠습니까?")) {
+                    setClassGroups(classGroups.filter(g => g.id !== groupId));
+                    if (activeGroupId === groupId) setActiveGroupId(null);
+                }
+            };
+
+            const saveCurrentRoster = (text) => {
+                if (!activeGroupId) return;
+                const names = text.split(/[\n,]+/).map(n => n.trim()).filter(n => n && n !== '이름' && n !== 'Name');
+                const uniqueNames = [...new Set(names)];
+                
+                setClassGroups(classGroups.map(g => 
+                    g.id === activeGroupId ? { ...g, students: uniqueNames } : g
+                ));
+                setIsEditingRoster(false);
+                setBulkText('');
+            };
+
+            const toggleClassMemberSelection = (name) => {
+                const newSet = new Set(selectedClassMembers);
+                if (newSet.has(name)) newSet.delete(name);
+                else newSet.add(name);
+                setSelectedClassMembers(newSet);
+            };
+
+            const addSelectedClassMembers = () => {
+                let addedCount = 0;
+                selectedClassMembers.forEach(name => {
+                    if (!players.some(p => p.name === name)) {
+                        createPlayer(name);
+                        addedCount++;
+                    }
+                });
+                alert(`${addedCount}명의 학생을 선수로 등록했습니다.`);
+                setShowClassModal(false);
+                setSelectedClassMembers(new Set());
             };
 
             // --- Match Generation ---
@@ -258,7 +391,7 @@
                     }
                     if (newMatches.length === 0) { alert("경기 가능한 인원이 부족합니다."); return; }
                 } 
-                else { // doubles_random
+                else { 
                     if (players.length < 4) { alert("최소 4명 필요"); return; }
                     const available = [...players].sort((a, b) => {
                         if (a.matchesPlayed !== b.matchesPlayed) return a.matchesPlayed - b.matchesPlayed;
@@ -344,11 +477,10 @@
 
             // --- File Save/Load helpers ---
             const saveToFile = () => {
-                const data = { leagueName, leagueType, players, matches, roundCount, singlesSchedule, savedAt: new Date().toISOString() };
+                const data = { leagueName, leagueType, players, matches, roundCount, singlesSchedule, classGroups, savedAt: new Date().toISOString() };
                 const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement('a');
-                // 파일명 정리
                 const safeName = leagueName.replace(/[^a-zA-Z0-9가-힣]/g, "_").trim();
                 link.href = url; link.download = `${safeName}_${new Date().toISOString().slice(0,10)}.json`;
                 document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
@@ -366,6 +498,7 @@
                             setLeagueName(data.leagueName || '불러온 리그'); 
                             setLeagueType(data.leagueType||'doubles_random');
                             setSinglesSchedule(data.singlesSchedule||[]); 
+                            setClassGroups(data.classGroups||[]);
                             setActiveTab('matches'); 
                             setView('app');
                         }
@@ -442,13 +575,11 @@
                                     <input type="text" value={leagueName} onChange={(e) => setLeagueName(e.target.value)} className="bg-transparent text-xl font-bold text-white outline-none border-b border-white/20 focus:border-white w-full sm:w-64" />
                                 </div>
                             </div>
-                            <div className="flex items-center gap-2">
-                                <button onClick={goToHome} className="btn bg-white/10 hover:bg-white/20 px-3 py-2 rounded-lg text-sm flex items-center gap-1.5"><RotateCcw size={16} /><span className="hidden sm:inline">초기화</span></button>
-                                
-                                <button onClick={() => loadDataInputRef.current?.click()} className="btn bg-white/10 hover:bg-white/20 px-3 py-2 rounded-lg text-sm flex items-center gap-1.5"><Upload size={16} /><span className="hidden sm:inline">열기</span></button>
+                            <div className="flex items-center gap-2 overflow-x-auto">
+                                <button onClick={goToHome} className="btn bg-white/10 hover:bg-white/20 px-3 py-2 rounded-lg text-sm flex items-center gap-1.5 whitespace-nowrap"><RotateCcw size={16} /><span className="ml-1">초기화</span></button>
+                                <button onClick={() => loadDataInputRef.current?.click()} className="btn bg-white/10 hover:bg-white/20 px-3 py-2 rounded-lg text-sm flex items-center gap-1.5 whitespace-nowrap"><Upload size={16} /><span className="ml-1">열기</span></button>
                                 <input type="file" ref={loadDataInputRef} className="hidden" accept=".json" onChange={(e) => loadFromFile(e, false)} />
-
-                                <button onClick={saveToFile} className="btn bg-white/10 hover:bg-white/20 px-3 py-2 rounded-lg text-sm flex items-center gap-1.5"><Download size={16} /><span className="hidden sm:inline">저장</span></button>
+                                <button onClick={saveToFile} className="btn bg-white/10 hover:bg-white/20 px-3 py-2 rounded-lg text-sm flex items-center gap-1.5 whitespace-nowrap"><Download size={16} /><span className="ml-1">저장</span></button>
                             </div>
                         </div>
                     </header>
@@ -468,7 +599,10 @@
                                         <input type="text" placeholder="이름 입력 (예: 김철수)" className="flex-1 border border-gray-300 rounded-lg px-4 py-2 outline-none focus:ring-2 focus:ring-blue-500" value={newPlayerName} onChange={(e) => setNewPlayerName(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && addPlayer()} />
                                         <button onClick={addPlayer} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2 whitespace-nowrap"><Plus size={20} /> 추가</button>
                                     </div>
-                                    <button onClick={() => setShowBulkModal(true)} className="w-full bg-gray-100 text-gray-700 py-2 rounded-lg text-sm hover:bg-gray-200 flex justify-center gap-2"><FileSpreadsheet size={16} /> 일괄 등록</button>
+                                    <div className="flex gap-2 pt-2 border-t border-gray-100">
+                                        <button onClick={() => setShowBulkModal(true)} className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg text-sm hover:bg-gray-200 flex justify-center gap-2"><FileSpreadsheet size={16} /> 일괄 등록</button>
+                                        <button onClick={() => { setActiveGroupId(null); setShowClassModal(true); }} className="flex-1 bg-indigo-50 text-indigo-700 py-2 rounded-lg text-sm hover:bg-indigo-100 flex justify-center gap-2 font-semibold border border-indigo-100"><School size={16} /> 학급</button>
+                                    </div>
                                 </div>
                                 <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                                     <div className="p-4 bg-gray-50 border-b flex justify-between items-center font-semibold text-gray-700"><span>등록 선수 ({players.length}명)</span>{players.length > 0 && <button onClick={() => confirm('전체 삭제?') && setPlayers([])} className="text-xs text-red-500 border border-red-200 px-2 py-1 rounded bg-white">전체 삭제</button>}</div>
@@ -605,7 +739,7 @@
                         )}
                     </main>
 
-                    {/* Bulk Modal */}
+                    {/* Bulk Modal (Standard) */}
                     {showBulkModal && (
                         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
                             <div className="bg-white rounded-xl shadow-lg w-full max-w-md p-6 space-y-4">
@@ -616,6 +750,89 @@
                                     let count = 0; names.forEach(name => { if (!players.some(p => p.name === name) && name !== '이름') { createPlayer(name); count++; }});
                                     alert(`${count}명 추가 완료`); setBulkText(''); setShowBulkModal(false);
                                 }} className="w-full bg-blue-600 text-white py-2 rounded-lg">추가하기</button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 2025 Class Modal (Refined) */}
+                    {showClassModal && (
+                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+                            <div className="bg-white rounded-xl shadow-lg w-full max-w-md p-6 space-y-4 flex flex-col max-h-[85vh]">
+                                <div className="flex justify-between items-center"><h3 className="text-lg font-bold">학급 관리</h3><button onClick={() => setShowClassModal(false)} className="text-gray-400 hover:text-gray-600"><X size={20} /></button></div>
+                                
+                                {isEditingRoster ? (
+                                    <div className="space-y-3">
+                                        <div className="bg-indigo-50 text-indigo-800 text-sm p-3 rounded-lg"><p><strong>{classGroups.find(g => g.id === activeGroupId)?.name || '새 학급'}</strong> 명단을 붙여넣으세요.</p></div>
+                                        <textarea className="w-full h-32 p-3 border rounded-lg resize-none outline-none focus:border-indigo-500" placeholder="예:\n김철수\n이영희" value={bulkText} onChange={(e) => setBulkText(e.target.value)}></textarea>
+                                        <div className="flex gap-2">
+                                            <button onClick={() => { setIsEditingRoster(false); setBulkText(''); }} className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg">취소</button>
+                                            <button onClick={() => saveCurrentRoster(bulkText)} className="flex-1 bg-indigo-600 text-white py-2 rounded-lg">저장</button>
+                                        </div>
+                                    </div>
+                                ) : !activeGroupId ? (
+                                    /* Group List View */
+                                    <div className="flex-1 overflow-hidden flex flex-col space-y-3">
+                                        <div className="flex-1 overflow-y-auto space-y-2">
+                                            {classGroups.length === 0 ? (
+                                                <div className="text-center py-8 text-gray-400 border-2 border-dashed rounded-lg">등록된 학급이 없습니다.<br/>아래 버튼으로 추가하세요.</div>
+                                            ) : (
+                                                classGroups.map(group => (
+                                                    <div key={group.id} onClick={() => setActiveGroupId(group.id)} className="flex justify-between items-center p-4 bg-gray-50 hover:bg-gray-100 rounded-xl cursor-pointer border border-gray-100 transition-colors group">
+                                                        <div className="font-bold text-lg text-gray-700">{group.name}</div>
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="text-sm text-gray-500">{group.students.length}명</span>
+                                                            <ChevronRight size={18} className="text-gray-400 group-hover:text-indigo-500"/>
+                                                        </div>
+                                                    </div>
+                                                ))
+                                            )}
+                                        </div>
+                                        <button onClick={addNewClassGroup} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold flex justify-center items-center gap-2 hover:bg-indigo-700 transition-colors shadow-sm">
+                                            <FolderPlus size={18} /> 새 학급 추가 (학년/반)
+                                        </button>
+                                    </div>
+                                ) : (
+                                    /* Single Group Member Selection View */
+                                    <div className="flex-1 overflow-hidden flex flex-col">
+                                        <div className="flex justify-between items-center mb-2 px-1">
+                                            <button onClick={() => setActiveGroupId(null)} className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1"><RotateCcw size={14}/> 목록으로</button>
+                                            <div className="flex gap-2">
+                                                <button onClick={() => deleteClassGroup(activeGroupId)} className="text-xs text-red-500 hover:underline">학급 삭제</button>
+                                                <span className="text-gray-300">|</span>
+                                                <button onClick={() => { setIsEditingRoster(true); setBulkText(classGroups.find(g => g.id === activeGroupId)?.students.join('\n') || ''); }} className="text-xs text-indigo-600 font-bold hover:underline">명단 수정</button>
+                                            </div>
+                                        </div>
+                                        <div className="font-bold text-center text-lg text-gray-800 mb-2">{classGroups.find(g => g.id === activeGroupId)?.name}</div>
+                                        
+                                        <div className="flex-1 overflow-y-auto border rounded-lg p-2 space-y-1 bg-gray-50">
+                                            {classGroups.find(g => g.id === activeGroupId)?.students.map(name => {
+                                                const isRegistered = players.some(p => p.name === name);
+                                                const isSelected = selectedClassMembers.has(name);
+                                                return (
+                                                    <div key={name} onClick={() => !isRegistered && toggleClassMemberSelection(name)} 
+                                                        className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors ${isRegistered ? 'bg-green-100 text-green-800 opacity-60 cursor-default' : isSelected ? 'bg-indigo-100 border-indigo-200 border' : 'bg-white hover:bg-gray-100 border border-transparent'}`}>
+                                                        <div className="flex items-center gap-3">
+                                                            {isRegistered ? <Check size={18}/> : isSelected ? <CheckSquare size={18} className="text-indigo-600"/> : <Square size={18} className="text-gray-300"/>}
+                                                            <span className="font-medium">{name}</span>
+                                                        </div>
+                                                        {isRegistered && <span className="text-xs font-bold">등록됨</span>}
+                                                    </div>
+                                                );
+                                            })}
+                                            {classGroups.find(g => g.id === activeGroupId)?.students.length === 0 && <div className="text-center py-4 text-gray-400">명단이 없습니다. '명단 수정'을 눌러 추가하세요.</div>}
+                                        </div>
+                                        <div className="pt-3 flex gap-2">
+                                            <button onClick={() => {
+                                                const currentStudents = classGroups.find(g => g.id === activeGroupId)?.students || [];
+                                                const unregsitered = currentStudents.filter(n => !players.some(p => p.name === n));
+                                                setSelectedClassMembers(new Set(unregsitered));
+                                            }} className="px-4 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-50">전체 선택</button>
+                                            <button onClick={addSelectedClassMembers} disabled={selectedClassMembers.size === 0} className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:bg-blue-700 transition-colors shadow-sm">
+                                                선택한 {selectedClassMembers.size}명 추가
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}
